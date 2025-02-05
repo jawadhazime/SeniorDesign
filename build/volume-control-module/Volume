@@ -23,11 +23,14 @@ def apply_gain(audio_data, gain):
     return audio_data * gain
 
 def normalize_audio(audio_data, gain):
-    """Normalize audio data based on the maximum amplitude."""
+    """Normalize audio data based on the average of the maximum and minimum amplitudes."""
     max_amplitude = np.max(np.abs(audio_data))
-    if max_amplitude == 0:
+    min_amplitude = np.min(np.abs(audio_data))
+    avg_amplitude = (max_amplitude + min_amplitude) / 2
+
+    if avg_amplitude == 0:
         return audio_data  # Avoid division by zero
-    return (audio_data / max_amplitude) * gain
+    return (audio_data / avg_amplitude) * gain
 
 def process_audio(file_path, output_path, volumetype, gain):
     """Process the audio file based on volumetype and apply compression."""
