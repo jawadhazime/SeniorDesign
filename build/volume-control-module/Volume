@@ -22,26 +22,34 @@ def apply_gain(audio_data, gain):
     """Apply gain to the audio data."""
     return audio_data * gain
 
-def normalize_audio(audio_data, gain):
-    """Normalize audio data based on the average of the maximum and minimum amplitudes."""
+def normalize_audio(audio_data):
+    """
+    Normalize audio data to a target peak amplitude (90% of the maximum possible amplitude).
+    Automatically calculate the required gain.
+    """
+    target_peak = 0.9 * 32767  # 90% of the maximum 16-bit amplitude
     max_amplitude = np.max(np.abs(audio_data))
-    min_amplitude = np.min(np.abs(audio_data))
-    avg_amplitude = (max_amplitude + min_amplitude) / 2
 
-    if avg_amplitude == 0:
-        return audio_data  # Avoid division by zero
-    return (audio_data / avg_amplitude) * gain
+    if max_amplitude == 0:
+        return audio_data, 1.0  # Avoid division by zero, return original data and gain = 1.0
 
-def process_audio(file_path, output_path, volumetype, gain):
+    # Calculate the required gain to normalize to the target peak
+    gain = target_peak / max_amplitude
+    return audio_data * gain, gain
+
+def process_audio(file_path, output_path, volumetype, gain=None):
     """Process the audio file based on volumetype and apply compression."""
     # Read the .wav file
     audio_data, sample_rate = read_wav(file_path)
 
     # Apply gain based on volumetype
     if volumetype == 0:
+        if gain is None:
+            raise ValueError("Gain must be provided when volumetype is 0.")
         audio_data = apply_gain(audio_data, gain)
     elif volumetype == 1:
-        audio_data = normalize_audio(audio_data, gain)
+        audio_data, auto_gain = normalize_audio(audio_data)
+        print(f"Automated gain for normalization: {auto_gain:.2f}")
 
     # Apply compression to prevent hearing damage
     compressor = pyCompressor.Compressor(threshold=-20.0, ratio=4.0, attack=0.01, release=0.1)
@@ -54,7 +62,7 @@ def process_audio(file_path, output_path, volumetype, gain):
 input_file = "input.wav"
 output_file = "output.wav"
 volumetype = 1  # 0 for fixed gain, 1 for normalization
-gain = 0.8  # Adjust this value as needed
 
-process_audio(input_file, output_file, volumetype, gain)
+# If volumetype is 0, provide a gain value. If volumetype is 1, gain is automated.
+process_audio(input_file, output_file, volumetype, gain=None)
 print(f"Processed audio saved to {output_file}")
