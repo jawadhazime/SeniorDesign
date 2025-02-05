@@ -1,0 +1,57 @@
+import wave
+import numpy as np
+import pyCompressor
+
+def read_wav(file_path):
+    """Read a .wav file and return the audio data and sample rate."""
+    with wave.open(file_path, 'rb') as wav_file:
+        sample_rate = wav_file.getframerate()
+        frames = wav_file.readframes(-1)
+        audio_data = np.frombuffer(frames, dtype=np.int16)
+    return audio_data, sample_rate
+
+def write_wav(file_path, audio_data, sample_rate):
+    """Write audio data to a .wav file."""
+    with wave.open(file_path, 'wb') as wav_file:
+        wav_file.setnchannels(1)  # Mono
+        wav_file.setsampwidth(2)  # 16-bit
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_data.astype(np.int16).tobytes())
+
+def apply_gain(audio_data, gain):
+    """Apply gain to the audio data."""
+    return audio_data * gain
+
+def normalize_audio(audio_data, gain):
+    """Normalize audio data based on the maximum amplitude."""
+    max_amplitude = np.max(np.abs(audio_data))
+    if max_amplitude == 0:
+        return audio_data  # Avoid division by zero
+    return (audio_data / max_amplitude) * gain
+
+def process_audio(file_path, output_path, volumetype, gain):
+    """Process the audio file based on volumetype and apply compression."""
+    # Read the .wav file
+    audio_data, sample_rate = read_wav(file_path)
+
+    # Apply gain based on volumetype
+    if volumetype == 0:
+        audio_data = apply_gain(audio_data, gain)
+    elif volumetype == 1:
+        audio_data = normalize_audio(audio_data, gain)
+
+    # Apply compression to prevent hearing damage
+    compressor = pyCompressor.Compressor(threshold=-20.0, ratio=4.0, attack=0.01, release=0.1)
+    audio_data = compressor.process(audio_data)
+
+    # Write the processed audio to a new .wav file
+    write_wav(output_path, audio_data, sample_rate)
+
+# Example usage
+input_file = "input.wav"
+output_file = "output.wav"
+volumetype = 1  # 0 for fixed gain, 1 for normalization
+gain = 0.8  # Adjust this value as needed
+
+process_audio(input_file, output_file, volumetype, gain)
+print(f"Processed audio saved to {output_file}")
