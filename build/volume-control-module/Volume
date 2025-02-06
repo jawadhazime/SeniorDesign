@@ -1,88 +1,59 @@
-import numpy as np
-import wave
 import os
+import math
 from pydub import AudioSegment
 from pydub.effects import compress_dynamic_range
 
 def convert_wav_to_usable_format(input_file, temp_file):
     """
-    Convert the input .wav file to mono, 16-bit PCM format and save it as a temporary file.
+    Convert the input .wav file to mono, 32-bit floating-point format and save it as a temporary file.
     """
     # Load the input audio file
     audio = AudioSegment.from_file(input_file)
 
-    # Convert to mono and 16-bit PCM format
+    # Convert to mono and 32-bit floating-point format
     audio = audio.set_channels(1)  # Mono
-    audio = audio.set_sample_width(2)  # 16-bit
+    audio = audio.set_sample_width(4)  # 32-bit floating-point
 
     # Export the converted audio to a temporary file
     audio.export(temp_file, format="wav")
 
-def read_wav(file_path):
-    """Read a .wav file and return the audio data and sample rate."""
-    with wave.open(file_path, 'rb') as wav_file:
-        sample_rate = wav_file.getframerate()
-        frames = wav_file.readframes(-1)
-        audio_data = np.frombuffer(frames, dtype=np.int16)
-    return audio_data, sample_rate
-
-def write_wav(file_path, audio_data, sample_rate):
-    """Write audio data to a .wav file."""
-    with wave.open(file_path, 'wb') as wav_file:
-        wav_file.setnchannels(1)  # Mono
-        wav_file.setsampwidth(2)  # 16-bit
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio_data.astype(np.int16).tobytes())
-
-def apply_gain(audio_data, gain):
-    """Apply gain to the audio data."""
-    return audio_data * gain
-
-def normalize_audio(audio_data):
+def linear_gain_to_db(gain):
     """
-    Normalize audio data to a target peak amplitude (90% of the maximum possible amplitude).
-    Automatically calculate the required gain.
+    Convert a linear gain value to decibels (dB).
     """
-    target_peak = 0.9 * 32767  # 90% of the maximum 16-bit amplitude
-    max_amplitude = np.max(np.abs(audio_data))
-
-    if max_amplitude == 0:
-        return audio_data, 1.0  # Avoid division by zero, return original data and gain = 1.0
-
-    # Calculate the required gain to normalize to the target peak
-    gain = target_peak / max_amplitude
-    return audio_data * gain, gain
+    if gain <= 0:
+        raise ValueError("Gain must be a positive number.")
+    return 20 * math.log10(gain)
 
 def process_audio(input_file, output_path, volumetype, gain=None):
-    """Process the audio file based on volumetype and apply compression."""
+    """
+    Process the audio file based on volumetype and apply compression.
+    Use pydub's volume control for applying gain.
+    """
     # Create a temporary file for the converted audio
     temp_file = "temp_audio.wav"
 
-    # Convert the input file to mono, 16-bit PCM format
+    # Convert the input file to mono, 32-bit floating-point format
     convert_wav_to_usable_format(input_file, temp_file)
 
-    # Read the converted .wav file
-    audio_data, sample_rate = read_wav(temp_file)
+    # Load the converted .wav file
+    audio = AudioSegment.from_file(temp_file)
 
-    # Apply gain based on volumetype
+    # Apply volume adjustment based on volumetype
     if volumetype == 0:
         if gain is None:
             raise ValueError("Gain must be provided when volumetype is 0.")
-        audio_data = apply_gain(audio_data, gain)
+        # Convert the linear gain value to dB
+        gain_db = linear_gain_to_db(gain)
+        print(f"Applying gain: {gain_db:.2f} dB")
+        # Apply the specified gain in dB
+        audio = audio.apply_gain(gain_db)
     elif volumetype == 1:
-        audio_data, auto_gain = normalize_audio(audio_data)
-        print(f"Automated gain for normalization: {auto_gain:.2f}")
-
-    # Convert numpy array to pydub AudioSegment for compression
-    audio_segment = AudioSegment(
-        audio_data.tobytes(),
-        frame_rate=sample_rate,
-        sample_width=2,  # 16-bit (2 bytes per sample)
-        channels=1
-    )
+        # Normalize the audio to 0 dBFS (full scale)
+        audio = audio.normalize()
 
     # Apply compression using pydub
-    compressed_audio = compress_dynamic_range(audio_segment, threshold=-20.0, ratio=4.0, attack=10, release=100)
+    compressed_audio = compress_dynamic_range(audio, threshold=-20.0, ratio=4.0, attack=10, release=100)
 
     # Export the compressed audio to a new .wav file
     compressed_audio.export(output_path, format="wav")
@@ -90,11 +61,12 @@ def process_audio(input_file, output_path, volumetype, gain=None):
     # Clean up the temporary file
     os.remove(temp_file)
 
-# Example usage
+#Example 
 input_file = "input.wav"
 output_file = "output.wav"
 volumetype = 0  # 0 for fixed gain, 1 for normalization
+gain = 10.0  # 2x volume increase (linear gain)
 
 # If volumetype is 0, provide a gain value. If volumetype is 1, gain is automated.
-process_audio(input_file, output_file, volumetype, gain=0.5)
+process_audio(input_file, output_file, volumetype, gain)
 print(f"Processed audio saved to {output_file}")
