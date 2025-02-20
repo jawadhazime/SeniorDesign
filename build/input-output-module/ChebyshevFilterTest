@@ -1,0 +1,38 @@
+from pydub import AudioSegment
+from pydub.playback import play
+from pydub.effects import low_pass_filter
+import numpy as np
+from scipy.signal import cheby2, filtfilt
+
+# Load the WAV file
+audio = AudioSegment.from_wav("input.wav")
+
+# Convert the audio to a numpy array
+samples = np.array(audio.get_array_of_samples())
+
+# Sampling rate
+fs = 48000  # 48 kHz
+
+# Define the filter parameters
+cutoff_freq = 4000  # 4 kHz cutoff frequency
+order = 5  # Filter order
+rs = 40  # Stopband attenuation in dB
+
+# Design the Chebyshev Type 2 low-pass filter
+b, a = cheby2(order, rs, cutoff_freq / (0.5 * fs), btype='low', output='ba')
+
+# Apply the filter using forward-backward filtering (filtfilt)
+filtered_samples = filtfilt(b, a, samples)
+
+# Convert the filtered samples back to an AudioSegment
+filtered_audio = AudioSegment(
+    filtered_samples.astype(np.int16).tobytes(),
+    frame_rate=fs,
+    sample_width=audio.sample_width,
+    channels=audio.channels
+)
+
+# Export the filtered audio to a new WAV file
+filtered_audio.export("output_filtered.wav", format="wav")
+
+print("Filtered audio saved as 'output_filtered.wav'")
